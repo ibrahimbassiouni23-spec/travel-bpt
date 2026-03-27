@@ -1,0 +1,155 @@
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+import urllib.parse
+
+TOKEN = "8705200128:AAGFcXTF2lss7l4Hj8WHH6Bg9pAnr9PxWZs"
+ADMIN_ID = 7748781319
+
+users = {}
+
+# Start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [["احجز ميعاد 🚀", "تواصل واتساب 📲"]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+    await update.message.reply_text(
+        "أهلاً بيك 👋\nاحجز ميعادك بسهولة في أقل من دقيقة 🚀\n\n⚠️ المواعيد محدودة اليوم",
+        reply_markup=reply_markup
+    )
+
+    users[update.effective_user.id] = {}
+
+# Messages
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text
+
+    if user_id not in users:
+        users[user_id] = {}
+
+    user = users[user_id]
+
+    # واتساب مباشر
+    if text == "تواصل واتساب 📲":
+        link = "https://wa.me/201032013792"
+        keyboard = [[InlineKeyboardButton("فتح واتساب 📲", url=link)]]
+        await update.message.reply_text("تواصل معانا:", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    # بدء
+    if text == "احجز ميعاد 🚀":
+        keyboard = [["نعم", "لا"]]
+        await update.message.reply_text("معاك باسبور ساري؟", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+        return
+
+    # فلترة
+    if "passport" not in user:
+        if text == "لا":
+            await update.message.reply_text("لازم يكون معاك باسبور ساري 👍")
+            return
+        elif text == "نعم":
+            user["passport"] = True
+            keyboard = [
+                ["إيطاليا 🇮🇹", "هولندا 🇳🇱"],
+                ["البرتغال 🇵🇹", "اليونان 🇬🇷"]
+            ]
+            await update.message.reply_text("اختار الدولة:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+            return
+
+    # الدولة
+    if "country" not in user:
+        user["country"] = text
+
+        if "إيطاليا" in text:
+            keyboard = [["سياحة", "بزنس"], ["عقد عمل", "ضم عائلي"]]
+        elif "هولندا" in text or "البرتغال" in text:
+            keyboard = [["سياحة فردي", "سياحة عائلي"]]
+        else:
+            keyboard = [["سياحة", "بزنس"]]
+
+        await update.message.reply_text("نوع الفيزا؟", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+        return
+
+    # إيطاليا تفاصيل
+    if "إيطاليا" in user.get("country", "") and text == "عقد عمل":
+        keyboard = [["عقد عمل 2025", "عقد عمل 2026"]]
+        await update.message.reply_text("اختار:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+        return
+
+    if "إيطاليا" in user.get("country", "") and text == "ضم عائلي":
+        keyboard = [["لم شمل الأسرة", "لم شمل الأسرة للأطفال"]]
+        await update.message.reply_text("اختار:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+        return
+
+    # نوع الفيزا
+    if "visa" not in user:
+        user["visa"] = text
+
+        await update.message.reply_text(
+            "🔒 إحنا معاك لحد استلام الفيزا\n⚠️ المواعيد محدودة"
+        )
+
+        keyboard = [
+            ["حجز فقط", "تجهيز ملف كامل"],
+            ["حجز + ملف كامل"]
+        ]
+
+        await update.message.reply_text("اختار الخدمة:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+        return
+
+    # الخدمة
+    if "service" not in user:
+        user["service"] = text
+        await update.message.reply_text("اكتب اسمك:")
+        return
+
+    # الاسم
+    if "name" not in user:
+        user["name"] = text
+        await update.message.reply_text("رقم الموبايل:")
+        return
+
+    # الرقم النهائي
+    if "phone" not in user:
+        user["phone"] = text
+
+        # لينك واتساب للعميل
+        phone = user["phone"].replace("0", "20", 1)
+        wa_link = f"https://wa.me/{phone}"
+
+        msg = f"""
+🔥 عميل جديد
+
+👤 {user['name']}
+📞 {user['phone']}
+🌍 {user['country']}
+📄 {user['visa']}
+🛠️ {user['service']}
+
+📲 واتساب:
+{wa_link}
+"""
+
+        # إرسال لك
+        await context.bot.send_message(chat_id=ADMIN_ID, text=msg)
+
+        # زر واتساب للعميل
+        encoded = urllib.parse.quote(msg)
+        my_link = f"https://wa.me/201032013792?text={encoded}"
+
+        keyboard = [[InlineKeyboardButton("تواصل واتساب 📲", url=my_link)]]
+
+        await update.message.reply_text(
+            "تم تسجيلك ✅\nاضغط للتواصل فورًا:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+        users[user_id] = {}
+
+# تشغيل
+app = ApplicationBuilder().token(TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.TEXT, handle_message))
+
+app.run_polling()
